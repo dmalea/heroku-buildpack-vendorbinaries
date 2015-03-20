@@ -1,8 +1,19 @@
-#!/bin/bash
+#!/bin/bash -e
 
+unamestr=`uname`
+if [[ "$unamestr" == 'Darwin' ]]; then
+  SEDOPTS=-e
+  TAROPTS=
+elif [[ "$unamestr" == 'Linux' ]]; then
+  SEDOPTS=-u
+  TAROPTS="--remove-files"
+else
+  echo "WARNING: Unknown platform $unamestr. Assuming Mac-compatible sed."
+  SEDOPTS=-e
+fi
 
 indent() {
-  sed -u 's/^/       /'
+  sed $SEDOPTS 's/^/       /'
 }
 
 echo "-----> Found a .vendor_urls file"
@@ -18,6 +29,21 @@ cd $1
 while read url; do
   if [ -n "$url" ]; then # incase ensure_newline_at_eof_on_save is enabled
     echo Vendoring $url | indent
-    curl -L --silent $url | tar xz
+    local=`basename $url`
+    if [[ "$url" = *tgz || $url = *tar.gz ]]; then
+      EXTRACT_TOOL="tar $TAROPTS -xzpf"
+    elif [[ "$url" = *gz ]]; then
+      EXTRACT_TOOL="gunzip"
+    else
+      echo "I don't know how to extract a file $local. Will leave as-is." | indent
+      EXTRACT_TOOL=""
+    fi
+    curl -O -L --silent $url
+    if [ -n "$EXTRACT_TOOL" ]; then
+      $EXTRACT_TOOL $local
+      if [ -e $local ]; then
+        rm $local
+      fi
+    fi
   fi
 done < .vendor_urls
